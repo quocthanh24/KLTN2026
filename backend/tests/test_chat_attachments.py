@@ -68,6 +68,11 @@ class FakeStorage:
     async def temporary_download_url(self, key, filename):
         return f"http://storage.local/{key}?filename={filename}"
 
+    async def read_document(self,key,max_bytes):
+        data=self.objects[key][0]
+        if len(data)>max_bytes:raise ValueError('Too large')
+        return data
+
 
 class RecordingManager:
     def __init__(self, session):
@@ -146,8 +151,8 @@ class ChatAttachmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(event[2])
         history = await self.chat.history(self.member, self.text_id, limit=10, before_message_id=None)
         self.assertEqual(history[0].attachments[0].id, result.attachments[0].id)
-        url = await self.chat.attachment_download_url(self.member, result.attachments[0].id)
-        self.assertIn(key, url)
+        data,mime,filename=await self.chat.attachment_content(self.member,result.attachments[0].id)
+        self.assertEqual(data,self.storage.objects[key][0]);self.assertEqual(filename,'report.pdf')
 
         file_only = await self.chat.send_attachment(
             self.sender, self.text_id, upload("note.txt", "text/plain", b"note"), None,
@@ -176,11 +181,11 @@ class ChatAttachmentTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.assert_error(
             "ATTACHMENT_ACCESS_DENIED",
-            self.chat.attachment_download_url(self.outsider, created.attachments[0].id),
+            self.chat.attachment_content(self.outsider, created.attachments[0].id),
         )
         await self.chat.delete(self.sender, created.id)
         await self.assert_error(
-            "ATTACHMENT_NOT_FOUND", self.chat.attachment_download_url(self.sender, created.attachments[0].id),
+            "ATTACHMENT_NOT_FOUND", self.chat.attachment_content(self.sender, created.attachments[0].id),
         )
 
     async def test_storage_and_database_failure_consistency(self):

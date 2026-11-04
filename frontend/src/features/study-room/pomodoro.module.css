@@ -1,0 +1,17 @@
+.card { margin: 24px 0; padding: 26px; max-width: 640px; border: 1px solid #c7d2fe; border-radius: 20px; background: linear-gradient(135deg, #eef2ff, #fff); color: #1e293b; box-shadow: 0 8px 24px #312e8110; }
+.break { background: linear-gradient(135deg, #ecfdf5, #fff); border-color: #a7f3d0; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.heading h4 { margin: 0; font-size: 18px; }
+.heading span { padding: 5px 12px; border-radius: 99px; background: #fff; font-size: 13px; }
+.phase { text-align: center; font-weight: 600; margin-bottom: 0; }
+.clock { font-size: clamp(48px, 7vw, 76px); font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; letter-spacing: -2px; }
+.caption { color: #64748b; font-size: 14px; text-align: center; }
+.settings { display: flex; gap: 18px; margin: 20px 0; }
+.settings label { display: grid; gap: 8px; flex: 1; font-size: 14px; }
+.settings input { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; }
+.controls { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.controls button { background: #4338ca; color: white; border: 0; padding: 11px 18px; border-radius: 9px; cursor: pointer; }
+.controls .end { background: white; color: #9f1239; border: 1px solid #fecdd3; }
+.card button:disabled { opacity: .5; cursor: default; }
+.confirm { padding: 16px; margin-top: 18px; background: white; border: 1px solid #fecdd3; border-radius: 12px; }
+.confirm button { margin-right: 10px; }

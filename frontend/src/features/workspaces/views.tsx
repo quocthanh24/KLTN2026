@@ -8,6 +8,7 @@ import { workspaceServices as api } from "@/features/auth/store";
 import { useAuth } from "@/features/auth/provider";
 import type { Workspace, WorkspaceInput, WorkspaceMember } from "@/lib/workspace-types";
 import { WorkspaceChannels } from "@/features/chat/views";
+import { invitationToken } from "@/lib/invitation-token";
 
 function useLoad<T>(load: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null);
@@ -41,7 +42,7 @@ export function WorkspaceList() {
   const state = useLoad(api.list); const [creating, setCreating] = useState(false); const router = useRouter();
   return <><h1>Workspace của bạn</h1><Back />{!state.data ? <LoadState {...state} /> : state.data.length ? <ul>{state.data.map(workspace => <li key={workspace.id}><Link href={`/workspaces/${workspace.id}`}>{workspace.name}</Link> — {workspace.role}</li>)}</ul> : <p>Bạn chưa tham gia Workspace nào. Tạo Workspace hoặc nhập mã lời mời bên dưới.</p>}
     {creating ? <WorkspaceForm cancel={() => setCreating(false)} save={async body => { const workspace = await api.create(body); router.push(`/workspaces/${workspace.id}`); }} /> : <button onClick={() => setCreating(true)}>Tạo Workspace</button>}
-    <form onSubmit={event => { const data = formValues(event); const token = value(data, "token").trim(); if (token) router.push(`/invitations/${encodeURIComponent(token)}`); }}><Field label="Mã lời mời" name="token" required /><button>Xem lời mời</button></form>
+    <form onSubmit={event => { const data = formValues(event); const token = invitationToken(value(data, "token")); if (token) router.push(`/invitations/${encodeURIComponent(token)}`); }}><Field label="Mã lời mời" name="token" placeholder="Dán mã hoặc liên kết lời mời" required /><button>Xem lời mời</button></form>
   </>;
 }
 function Invite({ id }: { id: string }) {

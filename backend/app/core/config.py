@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from typing import Self
+from typing import Self, Literal
 
 from pydantic import AnyHttpUrl, Field, PostgresDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,6 +33,38 @@ class Settings(BaseSettings):
     livekit_url: str = ""
     livekit_api_key: SecretStr = SecretStr("")
     livekit_api_secret: SecretStr = SecretStr("")
+    media_authority_enabled: bool = False
+    media_service_key_file: str = ""
+    media_control_url: str = ""
+    media_authority_pool_size: int = Field(default=10, ge=1, le=30)
+    rag_model_dir: str = ""
+    # Normal operation uses the configured API key; capped is an explicit test mode.
+    ai_chat_billing_mode: Literal['metered', 'capped'] = 'metered'
+    ai_chat_v2_live_approved: bool = False
+    ai_chat_v2_budget_approval_id: str = ""
+    ai_chat_v2_budget_topology: str = "single_host"
+    ai_chat_v2_budget_ledger: str = str(Path(__file__).resolve().parents[2] / '.runtime' / 'ai-chat-v2-budget.sqlite3')
+    ai_chat_v2_vision_ready: bool = True
+    ai_chat_v2_max_images: int = Field(default=24, ge=2, le=24)
+    ai_chat_v2_source_repair_attempts: int = Field(default=2, ge=0, le=3)
+    ai_chat_v2_original_first: bool = True
+    document_progressive_enabled: bool = True
+    ai_chat_v2_job_ttl_hours: int = Field(default=24, ge=1, le=168)
+    ai_chat_v2_worker_concurrency: int = Field(default=2, ge=1, le=8)
+    ai_provider: str = "openai"
+    openai_api_key: SecretStr = SecretStr("")
+    openai_model: str = "gpt-6-luna"
+    openai_timeout_seconds: int = Field(default=60, ge=10, le=90)
+    rag_processing_timeout_seconds: int = Field(default=120, ge=10, le=600)
+    ai_turn_max_calls: int = Field(default=24,ge=3,le=24)
+    ai_turn_timeout_seconds: int = Field(default=240,ge=30,le=300)
+    document_vision_enabled: bool = True
+    document_vision_max_pages: int = Field(default=32, ge=1, le=50)
+    document_vision_max_calls: int = Field(default=32, ge=1, le=50)
+    document_vision_max_pixels: int = Field(default=4_000_000, ge=100_000, le=8_000_000)
+    document_vision_output_tokens: int = Field(default=4096, ge=512, le=8192)
+    document_vision_daily_call_cap: int = Field(default=60, ge=1, le=1000)
+    document_vision_ledger: str = str(Path(__file__).resolve().parents[2] / '.runtime' / 'document-vision.sqlite3')
 
     @field_validator("jwt_secret_key")
     @classmethod

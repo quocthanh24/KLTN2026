@@ -33,7 +33,8 @@ export function LoginForm({ registered }: { registered: boolean }) {
 }
 export function Landing() {
   const { user } = useAuth(); const submit = useSubmission(); const router = useRouter();
-  return <><h1>Xin chào, {user?.full_name}</h1><p>Bạn đã đăng nhập.</p><nav><Link href="/workspaces">Workspace</Link><Link href="/profile">Thông tin cá nhân</Link><Link href="/settings/security">Đổi mật khẩu</Link></nav>
+  return <><h1>Xin chào, {user?.full_name}</h1><p>Bạn đã đăng nhập.</p><nav><Link href="/workspaces">Workspace</Link><Link href="/profile">Thông tin cá nhân</Link><Link href="/learning-analytics">Thống kê học tập</Link><Link href="/settings/security">Đổi mật khẩu</Link></nav>
+    {user?.system_role === "ADMIN" && <p><Link href="/admin/users">Quản trị hệ thống</Link></p>}
     <button disabled={submit.pending} onClick={() => void submit.run(async () => { await authStore.logout(); router.replace("/login"); })}>{submit.pending ? "Đang đăng xuất…" : "Đăng xuất"}</button><Feedback {...submit} /></>;
 }
 export function ProfileForm() {

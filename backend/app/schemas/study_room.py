@@ -27,3 +27,5 @@ class MediaCredential(BaseModel):
     token: str
     room: str
     identity: str
+    grant_id: UUID | None = None
+    expires_at: datetime | None = None

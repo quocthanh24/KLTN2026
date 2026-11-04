@@ -33,7 +33,13 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-tutor-v2-live/types/**/*.ts",
+    ".next-tutor-v2-live/dev/types/**/*.ts",
+    ".next-tutor-v2-build/types/**/*.ts",
+    ".next-tutor-v2-build/dev/types/**/*.ts",
+    ".next-tutor-v2-cutover-build/types/**/*.ts",
+    ".next-tutor-v2-cutover-build/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

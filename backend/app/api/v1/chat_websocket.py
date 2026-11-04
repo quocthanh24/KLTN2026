@@ -46,17 +46,23 @@ async def channel_socket(websocket: WebSocket, channel_id: UUID):
             return
         try:
             async with session_factory() as db:
-                await authenticate_channel(db, channel_id, frame["access_token"])
+                principal=await authenticate_channel(db, channel_id, frame["access_token"])
         except AppError as exc:
             code = 4403 if exc.status_code == 403 else 4404 if exc.status_code == 404 else 4401
             await websocket.close(code=code)
             return
         await channel_connections.connect(channel_id, websocket)
+        from app.realtime.moderation import register,permitted,connections
+        register(websocket,frame['access_token'],channel_id,principal.user.id,factory=session_factory)
         registered = True
         while True:
-            await websocket.receive_text()
+            if not await permitted(websocket):return
+            try:await asyncio.wait_for(websocket.receive_text(),timeout=1)
+            except asyncio.TimeoutError:pass
     except WebSocketDisconnect:
         pass
     finally:
+        from app.realtime.moderation import connections
+        connections.pop(websocket,None)
         if registered:
             channel_connections.disconnect(channel_id, websocket)

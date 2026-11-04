@@ -20,6 +20,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import get_settings
 from app.models import User, Workspace, WorkspaceMember, WorkspaceInvitation
 from app.models.enums import WorkspaceRole, InvitationStatus
+from app.db.base import Base
 from app.repositories.workspace_repository import WorkspaceRepository
 from app.repositories.workspace_member_repository import WorkspaceMemberRepository
 from app.repositories.workspace_invitation_repository import WorkspaceInvitationRepository
@@ -41,9 +42,9 @@ def setUpModule():
         try:
             async with engine.connect() as conn:
                 tables = set(await conn.run_sync(lambda c: inspect(c).get_table_names()))
-                if tables - {'alembic_version', 'users', 'auth_sessions', 'workspaces', 'workspace_members', 'workspace_invitations'}:
+                if tables - {'alembic_version', *Base.metadata.tables}:
                     raise RuntimeError('Unrelated tables in test database')
-                for table in (Workspace.__table__, WorkspaceMember.__table__, WorkspaceInvitation.__table__):
+                for table in Base.metadata.sorted_tables:
                     if table.name in tables and await conn.scalar(select(text('count(*)')).select_from(table)):
                         raise RuntimeError('Workspace test tables must be empty before migration round trip')
         finally:

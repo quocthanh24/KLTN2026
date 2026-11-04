@@ -4,7 +4,7 @@ export type MediaSnapshot = {
   status: string; connected: boolean;
   participants: { identity: string; name: string; local: boolean; microphone_enabled: boolean; camera_enabled: boolean; screen_sharing: boolean; tracks: Track[] }[];
 };
-export type MediaCredential = { url: string; token: string; identity: string; room: string };
+export type MediaCredential = { url: string; token: string; identity: string; room: string; grant_id?: string | null; expires_at?: string | null };
 const sdk = { room: () => new Room(), audio: createLocalAudioTrack, video: createLocalVideoTrack,
   screen: async () => (await createLocalScreenTracks({ audio: false }))[0] };
 
@@ -18,6 +18,18 @@ export function createMedia(
   const room = dependencies.room();
   let disposed = false;
   let connected = false;
+  let renewal: ReturnType<typeof setTimeout> | undefined;
+  function renew(grant: MediaCredential) {
+    if (!grant.expires_at || disposed) return;
+    const wait = Math.max(1000, Math.min(300000, Date.parse(grant.expires_at) - Date.now() - 60000));
+    renewal = setTimeout(() => {
+      void credential().then(next => {
+        if (disposed) return;
+        if (next.grant_id !== grant.grant_id) { close(); disconnected(); return; }
+        renew(next);
+      }).catch(() => { if (!disposed) { close(); disconnected(); } });
+    }, wait);
+  }
   const pending = new Set<string>();
   const local = new Map<string, LocalTrack>();
   function snapshot(status = connected ? "Đã kết nối media" : "Đang kết nối media…") {
@@ -43,6 +55,7 @@ export function createMedia(
   function close() {
     if (disposed) return;
     disposed = true; connected = false;
+    clearTimeout(renewal);
     for (const track of local.values()) track.stop();
     local.clear(); room.removeAllListeners(); void room.disconnect(true);
   }
@@ -54,6 +67,7 @@ export function createMedia(
       await room.connect(grant.url, grant.token);
       if (disposed) { await room.disconnect(true); return; }
       connected = true; snapshot();
+      renew(grant);
     } catch {
       if (!disposed) { error("Không thể kết nối máy chủ media. Kiểm tra cấu hình hoặc thử tham gia lại."); close(); disconnected(); }
     }

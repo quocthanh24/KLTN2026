@@ -20,6 +20,7 @@
 
   minio-init:
     image: minio-local:phase3b3
+    restart: "no"
     depends_on:
       minio:
         condition: service_healthy

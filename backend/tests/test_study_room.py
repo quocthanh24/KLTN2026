@@ -206,6 +206,33 @@ class StudyRoomTests(HttpAssertions, unittest.IsolatedAsyncioTestCase):
 
 
 class PresenceTests(unittest.TestCase):
+    def test_authoritative_resync_isolated_latest_devices_and_departures(self):
+        presence = RoomPresence()
+        room, other_room = uuid4(), uuid4()
+        a, b = [SimpleNamespace(id=uuid4(), full_name=name) for name in ("A", "B")]
+        presence.update("a", room, a, "join")
+        self.assertEqual([p["user_id"] for p in presence.snapshot(room)["participants"]], [str(a.id)])
+        presence.update("b", room, b, "join")
+        presence.update("other", other_room, b, "join")
+        stale = presence.snapshot(room)
+        for field in ("microphone_enabled", "camera_enabled", "screen_sharing"):
+            presence.update("b", room, b, "devices", {field: True})
+            current = presence.snapshot(room)["participants"]
+            self.assertFalse(current[0][field])
+            self.assertTrue(current[1][field])
+            self.assertFalse(presence.snapshot(other_room)["participants"][0][field])
+        presence.update("b", room, b, "join")
+        self.assertEqual(len(presence.snapshot(room)["participants"]), 2)
+        presence.disconnect("b")
+        self.assertEqual(len(stale["participants"]), 2)
+        self.assertEqual(len(presence.snapshot(room)["participants"]), 1)
+        presence.update("b-new", room, b, "join")
+        presence.update("b-new", room, b, "devices", {"screen_sharing": True})
+        recovered = presence.snapshot(room)["participants"]
+        self.assertEqual(len({p["user_id"] for p in recovered}), 2)
+        self.assertFalse(recovered[1]["camera_enabled"])
+        self.assertTrue(recovered[1]["screen_sharing"])
+
     def test_screen_share_ownership_and_simultaneous_participants(self):
         presence = RoomPresence(); room = uuid4()
         users = [SimpleNamespace(id=uuid4(), full_name=name) for name in ("A", "B")]

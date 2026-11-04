@@ -96,16 +96,18 @@ test('WebSocket authenticates in first frame, dispatches events, cleans up on un
   dispose(); assert.ok(socket.closed); assert.equal(socket.onclose, null);
   socket.onmessage({ data: JSON.stringify(event('message.created', message)) }); assert.equal(events.length, 1);
 });
-test('download relay authorizes with backend and sends no bearer to storage', async () => {
+test('download relay authorizes with backend and never contacts storage', async () => {
   process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example';
   const id = '00000000-0000-0000-0000-000000000001';
   let calls = 0;
   global.fetch = async (url, options) => {
-    if (++calls === 1) { assert.equal(url, `http://backend.example/api/v1/attachments/${id}/download`); assert.equal(options.headers.Authorization, 'Bearer test-token'); assert.equal(options.redirect, 'manual'); return new Response(null, { status: 307, headers: { location: 'http://storage.example/signed' } }); }
-    assert.equal(url, 'http://storage.example/signed'); assert.equal(options.headers, undefined); return new Response('private content');
+    assert.equal(++calls,1);assert.equal(url,`http://backend.example/api/v1/attachments/${id}/download`);assert.equal(options.headers.Authorization,'Bearer test-token');
+    return new Response('%PDF-1.7 private content', { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': "attachment; filename*=UTF-8''b%C3%A1o%20c%C3%A1o.pdf" } });
   };
   const response = await GET(new Request('http://frontend/api/download', { headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id }) });
-  assert.equal(await response.text(), 'private content'); assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(await response.text(), '%PDF-1.7 private content'); assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.equal(response.headers.get('content-disposition'), "attachment; filename*=UTF-8''b%C3%A1o%20c%C3%A1o.pdf");
 });
 test('download relay never fetches storage for anonymous or forbidden requests', async () => {
   process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example';
@@ -114,6 +116,33 @@ test('download relay never fetches storage for anonymous or forbidden requests',
   const params = { params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000001' }) };
   assert.equal((await GET(new Request('http://frontend'), params)).status, 401); assert.equal(calls, 0);
   assert.equal((await GET(new Request('http://frontend', { headers: { authorization: 'Bearer token' } }), params)).status, 403); assert.equal(calls, 1);
+});
+
+test('download link is a local blob of already authorized bytes, not a reusable storage grant', async t => {
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example'; let calls = 0;
+  global.fetch = async (_url, options) => {
+    assert.equal(++calls, 1); assert.equal(options.headers.Authorization, 'Bearer test-token');
+    return new Response('%PDF-private', {headers:{'Content-Type':'application/pdf'}});
+  };
+  const response = await GET(new Request('http://frontend/api/download?mode=link', { headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000001' }) });
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(await response.text(),'%PDF-private');
+  t.mock.method(URL,'createObjectURL',file=>{assert.equal(file.size,12);return 'blob:private-test';});
+  global.fetch = async (url, options) => {
+    assert.equal(url, '/api/attachments/id/download');
+    assert.equal(options.headers.Authorization, 'Bearer test-token');
+    return new Response('%PDF-private',{headers:{'Content-Type':'application/pdf'}});
+  };
+  assert.deepEqual(await createChatServices(bridge).downloadLink('id'), { url: 'blob:private-test',filename:'download' });
+});
+
+test('download relay retains backend metadata without exposing a location', async () => {
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example'; let calls = 0;
+  global.fetch = async () => {assert.equal(++calls,1);return new Response(new Uint8Array([37,80,68,70]),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="server.pdf"'}});};
+  const response = await GET(new Request('http://frontend', { headers: { authorization: 'Bearer test-token' } }), { params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000001' }) });
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="server.pdf"');
+  assert.equal(await response.text(), '%PDF');
 });
 test('WebSocket retries disconnection and cancels pending reconnect on cleanup', async t => {
   process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example';
@@ -146,4 +175,32 @@ test('download API uses same-origin authorized relay and returns a blob', async 
     return new Response('private content');
   };
   assert.equal(await (await createChatServices(bridge).download('id')).text(), 'private content');
+});
+
+test('binary download preserves bytes, MIME and server filename with safe fallback', async () => {
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example';
+  const bytes = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(177 * 1024, 0x80)]);
+  for (const [disposition, name] of [
+    ["attachment; filename=report.pdf; filename*=UTF-8''b%C3%A1o%20c%C3%A1o.pdf", 'báo cáo.pdf'],
+    ['inline; filename="server report.pdf"', 'server report.pdf'],
+    ["attachment; filename*=UTF-8''%INVALID", 'original.pdf'],
+    ['', 'original.pdf'],
+  ]) {
+    global.fetch = async () => new Response(bytes, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': disposition } });
+    const file = await createChatServices(bridge).download('id', 'original.pdf');
+    assert.equal(file.name, name); assert.equal(file.type, 'application/pdf');
+    assert.deepEqual(Buffer.from(await file.arrayBuffer()), bytes);
+  }
+});
+
+test('binary response read failure reports the cause instead of generic form error', async () => {
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'http://backend.example';
+  global.fetch = async () => new Response(new ReadableStream({ start(controller) {
+    controller.error(new DOMException('Body read timed out', 'TimeoutError'));
+  } }));
+  await assert.rejects(createChatServices(bridge).download('id', 'report.pdf'), error => {
+    assert.equal(error.error.code, 'ATTACHMENT_BODY_FAILED');
+    assert.match(error.error.message, /TimeoutError: Body read timed out/);
+    return true;
+  });
 });

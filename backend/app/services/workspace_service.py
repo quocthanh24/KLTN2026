@@ -104,6 +104,8 @@ class WorkspaceService:
         async with self.transaction(principal):
             workspace, _ = await self.access(workspace_id, principal.user.id, {WorkspaceRole.OWNER})
             await self.workspaces.soft_delete(workspace, now=datetime.now(UTC))
+            from app.services.media_authority import revoke_in_transaction
+            await revoke_in_transaction(self.db,'WORKSPACE',workspace_id,principal.user.id)
 
     async def create_invitation(self, principal: Principal, workspace_id: UUID, request: InvitationCreateRequest):
         async with self.transaction(principal):
@@ -181,6 +183,8 @@ class WorkspaceService:
             if target.role == WorkspaceRole.OWNER:
                 raise AppError(403, "WORKSPACE_OWNER_CANNOT_BE_REMOVED", "Không thể xóa OWNER")
             await self.members.remove(workspace_id, user_id)
+            from app.services.media_authority import revoke_in_transaction
+            await revoke_in_transaction(self.db,'MEMBERSHIP',target.id,principal.user.id)
 
     async def change_role(self, principal: Principal, workspace_id: UUID, user_id: UUID, role: str):
         async with self.transaction(principal):
@@ -201,3 +205,5 @@ class WorkspaceService:
             if member.role == WorkspaceRole.OWNER:
                 raise AppError(403, "WORKSPACE_OWNER_CANNOT_LEAVE", "OWNER không được rời Workspace")
             await self.members.remove(workspace_id, principal.user.id)
+            from app.services.media_authority import revoke_in_transaction
+            await revoke_in_transaction(self.db,'MEMBERSHIP',member.id,principal.user.id)

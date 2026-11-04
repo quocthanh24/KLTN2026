@@ -18,6 +18,10 @@ export function createChatServices(bridge: AuthBridge) {
     remove: (id: string) => request<void>(`/messages/${id}`, { ...options, method: "DELETE" }),
     react: (id: string, emoji: string) => request<Reaction[]>(`/messages/${id}/reactions/${encodeURIComponent(emoji)}`, { ...options, method: "PUT" }),
     unreact: (id: string, emoji: string) => request<void>(`/messages/${id}/reactions/${encodeURIComponent(emoji)}`, { ...options, method: "DELETE" }),
-    download: (id: string) => request<Blob>(`/attachments/${id}/download`, { ...options, download: true }),
+    download: (id: string, filename?: string) => request<File>(`/attachments/${id}/download`, { ...options, download: true, downloadFilename: filename }),
+    downloadLink: async (id: string) => {
+      const file=await request<File>(`/attachments/${id}/download`,{...options,download:true});
+      return {url:URL.createObjectURL(file),filename:file.name};
+    },
   };
 }

@@ -1,0 +1,8 @@
+.area { margin: 24px 0; padding: 18px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f8fafc; color: #172033; }
+.area h3 { margin-top: 0; }
+.area fieldset { border: 0; padding: 16px 0; }
+.area label { display: block; margin-top: 12px; }
+.area input, .area textarea { max-width: 100%; }
+.list { list-style: none; padding: 0; display: grid; gap: 12px; }
+.list li { padding: 14px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow-wrap: anywhere; }
+.panel { margin: 18px 0; padding: 18px; border: 2px solid #93c5fd; border-radius: 10px; background: white; overflow-wrap: anywhere; }

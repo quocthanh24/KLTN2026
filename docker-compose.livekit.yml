@@ -1,6 +1,13 @@
 services:
   livekit:
     image: livekit/livekit-server:v1.9.11
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
     command:
       - --config-body
       - |

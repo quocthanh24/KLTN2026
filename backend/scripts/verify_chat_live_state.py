@@ -60,7 +60,7 @@ async def main(data):
             reactions = (await db.scalars(select(MessageReaction).where(MessageReaction.message_id == edited.id))).all()
             assert len(reactions) == 1 and reactions[0].emoji == "👍"
             attachment = next(a for a in attachments if str(a.id) == data["attachment_id"])
-            assert attachment.original_filename == "phase3e-live.txt"
+            assert attachment.original_filename == data.get("filename", "phase3e-live.txt")
             head = await asyncio.to_thread(storage.client.head_object, Bucket=storage.bucket, Key=attachment.storage_key)
             assert head["ContentLength"] == attachment.size_bytes
             obj = await asyncio.to_thread(storage.client.get_object, Bucket=storage.bucket, Key=attachment.storage_key)

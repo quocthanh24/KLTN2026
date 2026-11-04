@@ -3,6 +3,8 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const base = process.env.FRONTEND_TEST_URL || 'http://localhost:3100';
+const attachmentOnly = process.argv.includes('--attachment-only');
+const pdfBytes = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(177 * 1024, 0x80)]);
 const uid = '00000000-0000-0000-0000-000000000001';
 const cid = '00000000-0000-0000-0000-000000000002';
 const second = '00000000-0000-0000-0000-000000000003';
@@ -15,6 +17,7 @@ async function fixture(browser, role = 'OWNER', fail = false) {
   const context = await browser.newContext();
   const page = await context.newPage();
   const errors = []; page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (/same key|unique.*key/i.test(message.text())) errors.push(message.text()); });
   page.on('console', message => {
     if (message.type() === 'error' && message.text().includes('Encountered two children with the same key')) errors.push(message.text());
   });
@@ -50,7 +53,9 @@ async function fixture(browser, role = 'OWNER', fail = false) {
   });
   await page.route('**/api/attachments/*/download', async route => {
     assert.equal(route.request().headers().authorization, 'Bearer browser-fixture-token'); downloaded = true;
-    await route.fulfill({ contentType: 'application/octet-stream', body: 'hello attachment' });
+    await route.fulfill(attachmentOnly
+      ? { contentType: 'application/pdf', headers: { 'Content-Disposition': "attachment; filename*=UTF-8''b%C3%A1o%20c%C3%A1o.pdf" }, body: pdfBytes }
+      : { contentType: 'application/octet-stream', headers: { 'Content-Disposition': 'attachment; filename="note.txt"' }, body: 'hello attachment' });
   });
   await page.route('**/api/v1/**', async route => {
     const request = route.request(); const url = new URL(request.url()); const path = url.pathname.replace('/api/v1', ''); const method = request.method();
@@ -61,6 +66,7 @@ async function fixture(browser, role = 'OWNER', fail = false) {
     if (path === '/workspaces/workspace') return ok({ id: 'workspace', name: 'Frontend verification', role, description: null, created_at: date, updated_at: date });
     if (path === '/workspaces/workspace/members') return ok([{ user_id: uid, full_name: user.full_name, email: user.email, role, joined_at: date }]);
     if (path === '/workspaces') return ok([]);
+    if (path.endsWith('/learning-documents') && method === 'GET') return ok([]);
     if (path.endsWith('/study-room/media-token')) {
       // Hold credential response while checking leave/switch cancellation. This is
       // not a simulated successful LiveKit connection or live media verification.
@@ -106,11 +112,28 @@ async function fixture(browser, role = 'OWNER', fail = false) {
   return { context, page, errors, sockets, closed, emit, download: () => downloaded, deny: () => { deny = true; }, denyRoom: () => { denyRoom = true; }, denyMedia: () => { denyMedia = true; } };
 }
 
-(async () => {
+if (require.main === module) (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   let checks = 0;
   try {
     const f = await fixture(browser); const p = f.page;
+    if (attachmentOnly) {
+      await p.getByLabel('Đính kèm tệp (tối đa 25 MB)').setInputFiles({ name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('hello attachment') });
+      await p.getByRole('button', { name: 'Gửi tin nhắn', exact: true }).click();
+      // Phase 7C downloads use authenticated bytes and a local blob, never a storage grant.
+      const workspaceUrl = p.url();
+      const downloadEvent = p.waitForEvent('download');
+      await p.getByRole('button', { name: 'Tải note.txt (1 KB)', exact: true }).click();
+      const download = await downloadEvent;
+      assert.equal(download.suggestedFilename(), 'báo cáo.pdf');
+      const chunks = []; for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      assert.deepEqual(Buffer.concat(chunks), pdfBytes);
+      assert.equal(p.url(), workspaceUrl);
+      assert.equal(await p.getByText('Có lỗi xảy ra. Vui lòng thử lại.', { exact: true }).count(), 0);
+      await p.getByText('Đang xử lý…', { exact: true }).waitFor({ state: 'hidden' });
+      console.log('PASS: attachment browser download bytes and settled UI');
+      return;
+    }
     await p.getByText('History message', { exact: true }).waitFor();
     assert.equal(await p.locator('[data-message-id="message2"] script').count(), 0);
     assert.equal(await p.locator('[data-message-id="message2"]').getByRole('button', { name: 'Sửa tin nhắn', exact: true }).count(), 0); checks++;
@@ -120,22 +143,46 @@ async function fixture(browser, role = 'OWNER', fail = false) {
     await p.waitForFunction(() => !document.querySelector('[data-message-id="message1"]'));
     await p.getByRole('button', { name: '◇ study STUDY_ROOM' }).click();
     await p.getByText('Chưa có thành viên trong phòng.').waitFor();
-    for (const name of ['Microphone: OFF', 'Camera: OFF', 'Chia s? m?n h?nh']) assert.ok(await p.getByRole('button', { name, exact: true }).isDisabled());
+    for (const name of ['Microphone: OFF', 'Camera: OFF', 'Chia sẻ màn hình']) assert.ok(await p.getByRole('button', { name, exact: true }).isDisabled());
     await p.getByRole('button', { name: 'Tham gia phòng', exact: true }).click();
     await p.getByText('Bạn đang ở trong phòng.', { exact: true }).waitFor();
-    await p.getByRole('list', { name: 'Thành viên trong phòng', exact: true }).getByText('Test Owner · Đang trong phòng').waitFor();
+    const participants = p.getByRole('list', { name: 'Thành viên trong phòng', exact: true });
+    await participants.getByText('Test Owner', { exact: true }).waitFor();
+    assert.equal(await participants.locator('li').count(), 1);
+    const statusSocket = f.sockets.findLast(s => !f.closed.includes(s) && s.url().includes('/ws/study-rooms/'));
+    const devices = { microphone_enabled: false, camera_enabled: false, screen_sharing: false };
+    const snapshot = { type: 'room.state', data: { channel: channel(study, 'study', 'STUDY_ROOM'), self_state: 'IN_ROOM', self_devices: devices,
+      participants: [{ user_id: uid, full_name: user.full_name, state: 'IN_ROOM', joined_at: date, ...devices },
+        { user_id: 'other', full_name: 'Other participant', state: 'IN_ROOM', joined_at: date, ...devices, camera_enabled: true, screen_sharing: true }] } };
+    statusSocket.send(JSON.stringify(snapshot)); statusSocket.send(JSON.stringify(snapshot));
+    await participants.locator('li').filter({ hasText: 'Other participant' }).getByTitle('Camera: ON', { exact: true }).waitFor();
+    assert.equal(await participants.locator('li').count(), 2);
+    assert.equal(await participants.getByRole('button').count(), 0);
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    if (process.env.LIVE_EVIDENCE_DIR) {
+      const fs = require('node:fs'), path = require('node:path');
+      fs.mkdirSync(process.env.LIVE_EVIDENCE_DIR, { recursive: true });
+      await p.screenshot({ path: path.join(process.env.LIVE_EVIDENCE_DIR, 'phase4f-browser-contract.png'), fullPage: true });
+    }
+    await participants.locator('li').filter({ hasText: 'Test Owner' }).getByTitle('Camera: OFF', { exact: true }).waitFor();
+    statusSocket.close({ code: 1001 });
+    await p.getByText('Mất kết nối · Đang hiển thị trạng thái gần nhất. Kết nối lại để đồng bộ.', { exact: true }).waitFor();
+    assert.equal(await participants.locator('li').count(), 2);
+    await p.getByRole('button', { name: 'Kết nối lại', exact: true }).click();
+    await participants.getByText('Other participant', { exact: true }).waitFor({ state: 'detached' });
+    assert.equal(await participants.locator('li').count(), 1); checks++;
     await p.getByText('Đang kết nối media…', { exact: true }).waitFor();
-    for (const name of ['Microphone: OFF', 'Camera: OFF', 'Chia s? m?n h?nh']) assert.ok(await p.getByRole('button', { name, exact: true }).isDisabled());
+    for (const name of ['Microphone: OFF', 'Camera: OFF', 'Chia sẻ màn hình']) assert.ok(await p.getByRole('button', { name, exact: true }).isDisabled());
     await p.getByRole('button', { name: 'Rời phòng', exact: true }).click();
     await p.getByText('Chưa có thành viên trong phòng.').waitFor();
     checks++;
-    for (const name of ['Microphone: OFF', 'Camera: OFF', 'Chia s? m?n h?nh']) assert.ok(await p.getByRole('button', { name, exact: true }).isDisabled());
+    for (const name of ['Microphone: OFF', 'Camera: OFF', 'Chia sẻ màn hình']) assert.ok(await p.getByRole('button', { name, exact: true }).isDisabled());
     f.denyMedia();
     await p.getByRole('button', { name: 'Tham gia phòng', exact: true }).click();
     await p.getByText('Media đã ngắt hoặc không thể kết nối. Hãy tham gia lại phòng.', { exact: true }).waitFor();
     await p.getByText('Bạn đang ở ngoài phòng.', { exact: true }).waitFor();
     assert.equal(await p.evaluate(() => window.mediaCaptureCalls), 0); checks++;
-    const roomSocket = f.sockets.find(s => s.url().includes('/ws/study-rooms/'));
+    const roomSocket = f.sockets.findLast(s => !f.closed.includes(s) && s.url().includes('/ws/study-rooms/'));
     roomSocket.close({ code: 1001 });
     await p.getByText('Đã ngắt kết nối phòng. Vui lòng kết nối lại.', { exact: true }).waitFor();
     await p.getByRole('button', { name: 'Kết nối lại', exact: true }).click();
@@ -214,3 +261,4 @@ async function fixture(browser, role = 'OWNER', fail = false) {
     console.log(`PASS: ${checks} browser scenarios (mocked API/WebSocket contracts)`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = { fixture };

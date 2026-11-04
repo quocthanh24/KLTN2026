@@ -2,7 +2,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Path, Query, Response, UploadFile
-from fastapi.responses import RedirectResponse
 
 from app.api.dependencies import CurrentPrincipal, DbSession
 from app.schemas.chat import MessageRequest, MessageResponse, ReactionSummaryResponse
@@ -41,10 +40,10 @@ async def send_attachment(
     return DataResponse(data=await ChatService(db).send_attachment(principal, channel_id, file, content))
 
 
-@router.get("/attachments/{attachment_id}/download", response_class=RedirectResponse)
+@router.get("/attachments/{attachment_id}/download", response_class=Response)
 async def download_attachment(attachment_id: UUID, principal: CurrentPrincipal, db: DbSession):
-    url = await ChatService(db).attachment_download_url(principal, attachment_id)
-    return RedirectResponse(url=url, status_code=307)
+    from app.api.v1.learning_documents import file_response
+    return file_response(await ChatService(db).attachment_content(principal,attachment_id))
 
 
 @router.patch("/messages/{message_id}", response_model=DataResponse[MessageResponse])

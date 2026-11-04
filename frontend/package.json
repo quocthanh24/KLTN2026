@@ -8,17 +8,29 @@
         "start": "next start",
         "lint": "eslint .",
         "typecheck": "tsc --noEmit",
-        "test": "node --test tests/chat.test.cjs tests/study-room.test.cjs",
+        "test": "node --test tests/chat.test.cjs tests/study-room.test.cjs tests/workspace-invitations.test.cjs tests/pomodoro.test.cjs tests/learning-documents.test.cjs tests/learning-analytics.test.cjs",
+        "test:documents-live": "node tests/learning-documents-live.cjs",
+        "test:documents-browser": "node tests/learning-documents-browser.cjs",
+        "test:pomodoro-live": "node tests/pomodoro-live.cjs",
         "test:browser": "node tests/chat-browser.cjs",
         "test:live": "node tests/chat-live.cjs",
         "test:media-live": "node tests/media-live.cjs",
-        "test:screen-live": "node tests/media-live.cjs --screen-share"
+        "test:screen-live": "node tests/media-live.cjs --screen-share",
+        "test:member-status-live": "node tests/media-live.cjs --screen-share --member-status",
+        "test:invitation-live": "node tests/invitation-live.cjs",
+        "prebuild": "node scripts/copy-pdf-worker.mjs",
+        "predev": "node scripts/copy-pdf-worker.mjs",
+        "test:documents-manage-live": "node tests/learning-documents-manage-live.cjs",
+        "test:ai-v2": "node tests/ai-chat-v2-local.cjs"
     },
     "dependencies": {
         "livekit-client": "2.17.2",
         "next": "^16.3.6",
+        "pdfjs-dist": "^6.4.299",
         "react": "^19.3.0",
-        "react-dom": "^19.3.0"
+        "react-dom": "^19.3.0",
+        "react-markdown": "^10.1.0",
+        "remark-gfm": "^4.0.1"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
