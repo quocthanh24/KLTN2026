@@ -9,6 +9,9 @@ import type { Workspace } from "@/lib/workspace-types";
 import { useChat } from "./use-chat";
 import { validateFile } from "./state";
 import { StudyRoom } from "@/features/study-room/views";
+import { ApiFailure } from "@/lib/api";
+import { LearningDocuments } from "@/features/learning-documents/views";
+import { AIAssistant } from "@/features/ai/views";
 
 function ChannelForm({ channel, save, cancel }: { channel?: Channel; save: (body: ChannelInput) => Promise<void>; cancel: () => void }) {
   const submit = useSubmission();
@@ -89,7 +92,17 @@ function MessageItem({ message, chat }: { message: Message; chat: ReturnType<typ
       <div className="actions"><button disabled={submit.pending}>Lưu tin nhắn</button><button type="button" onClick={() => setEditing(false)}>Hủy</button></div>
     </form> : message.content && <p className="description">{message.content}</p>}
     {message.attachments.map(file => <button className="attachment" key={file.id} disabled={submit.pending} onClick={() => void submit.run(async () => {
-      const blob = await api.download(file.id); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = file.original_filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      try {
+        const downloaded = await api.downloadLink(file.id);
+        const link = document.createElement("a");
+        link.href = downloaded.url; link.download = downloaded.filename; link.hidden = true;
+        document.body.appendChild(link);
+        try { link.click(); } finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(downloaded.url),1000); }
+      } catch (error) {
+        if (error instanceof ApiFailure) throw error;
+        const reason = error instanceof Error ? `${error.name}: ${error.message}` : "Lỗi trình duyệt";
+        throw new ApiFailure(0, { code: "ATTACHMENT_DOWNLOAD_FAILED", message: `Không thể lưu tệp (${reason}).`, fields: null });
+      }
     })}>Tải {file.original_filename} ({Math.ceil(file.size_bytes / 1024)} KB)</button>)}
     <div className="reactions" aria-label="Cảm xúc">{message.reactions.map(reaction => <span key={reaction.emoji}>{reaction.emoji} {reaction.count}</span>)}</div>
     <details><summary>Thêm / gỡ cảm xúc</summary><div className="actions">{[...new Set(["👍", "❤️", "🎉", "😂", "✅", ...message.reactions.map(r => r.emoji)])].map(emoji => <div key={emoji} className="reaction-actions">
@@ -99,6 +112,7 @@ function MessageItem({ message, chat }: { message: Message; chat: ReturnType<typ
     {own && !editing && <div className="actions message-actions"><button type="button" className="secondary" onClick={() => { submit.reset(); setEditing(true); }}>Sửa tin nhắn</button><button type="button" className="danger" disabled={submit.pending} onClick={() => {
       if (window.confirm("Xóa tin nhắn này?")) void submit.run(async () => { await api.remove(message.id); chat.receive({ type: "message.deleted", data: { message_id: message.id } }); });
     }}>Xóa tin nhắn</button></div>}
+    <ReportButton targetType="MESSAGE" targetId={message.id} />
     {submit.pending && <p role="status">Đang xử lý…</p>}<Feedback {...submit} />
   </li>;
 }

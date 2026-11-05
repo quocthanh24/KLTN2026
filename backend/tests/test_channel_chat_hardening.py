@@ -35,6 +35,11 @@ class HttpAssertions:
 
         previous = app.dependency_overrides.copy()
         app.dependency_overrides[get_db] = db
+        from app.db.media_authority import get_media_pools
+        @asynccontextmanager
+        async def media_db():
+            yield self.session
+        app.dependency_overrides[get_media_pools] = lambda: {'lease':media_db,'join':media_db,'refresh':media_db}
         try:
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app), base_url="http://testserver/api/v1/",
@@ -191,9 +196,10 @@ class AttachmentHttpTests(HttpAssertions, unittest.IsolatedAsyncioTestCase):
                 self.error(await client.get(path, headers=self.headers(self.outsider)), 403, "ATTACHMENT_ACCESS_DENIED")
                 self.storage.temporary_download_url.assert_not_awaited()
                 response = await client.get(path, headers=self.headers(self.member))
-                self.assertEqual(response.status_code, 307)
-                self.assertEqual(response.headers["location"], "http://storage.local/private")
-                self.storage.temporary_download_url.assert_awaited_once_with(next(iter(self.storage.objects)), "note.txt")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.content,b'hello')
+                self.assertNotIn('location',response.headers)
+                self.storage.temporary_download_url.assert_not_awaited()
                 self.assertEqual(await self.counts(), (1, 1))
 
     async def test_exact_25mb_boundary_and_rejected_upload_side_effects(self):

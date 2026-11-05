@@ -4,17 +4,19 @@ import { chatAuth } from "@/features/auth/store";
 import type { Channel } from "@/lib/chat-types";
 import { connectRoom, type RoomState } from "./realtime";
 import { MediaPanel } from "./media-view";
+import styles from "./participants.module.css";
+import { PomodoroCard } from "./pomodoro-view";
 
 export function StudyRoom({ channel }: { channel: Channel }) {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+
   const [mediaActive, setMediaActive] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const connection = useRef<ReturnType<typeof connectRoom> | null>(null);
   useEffect(() => {
-    const client = connectRoom(channel.id, chatAuth, state => { setRoom(state); setPending(false); setError(""); }, message => { setRoom(null); setPending(false); setError(message); });
+    const client = connectRoom(channel.id, chatAuth, state => { setRoom(state); setPending(false); setError(""); }, message => { setPending(false); setError(message); });
     connection.current = client;
     return () => { connection.current = null; client.close(); };
   }, [channel.id, attempt]);
@@ -42,5 +44,20 @@ export function StudyRoom({ channel }: { channel: Channel }) {
         </div>
       </li>)}</ul>
     </>}
+    {room && <section aria-label="Trạng thái thành viên" className={styles.participants}>
+      <h4>Thành viên trong phòng ({room.participants.length})</h4>
+      <p role="status">{error ? "Mất kết nối · Đang hiển thị trạng thái gần nhất. Kết nối lại để đồng bộ." : "Trạng thái được đồng bộ từ phòng học."}</p>
+      {!room.participants.length && <p>Chưa có thành viên trong phòng.</p>}
+      <ul aria-label="Thành viên trong phòng">{[...room.participants].sort((a, b) => a.full_name.localeCompare(b.full_name, "vi") || a.user_id.localeCompare(b.user_id)).map(person => <li key={person.user_id}>
+        <strong>{person.full_name}</strong>
+        <div className={styles.statuses}>{([
+          ["🎙", "Microphone", person.microphone_enabled],
+          ["▣", "Camera", person.camera_enabled],
+          ["▤", "Màn hình", person.screen_sharing],
+        ] as const).map(([icon, label, enabled]) => <span key={label} data-enabled={enabled} title={`${label}: ${enabled ? "ON" : "OFF"}`}>
+          <span aria-hidden="true">{icon}</span> {label}: {enabled ? "ON" : "OFF"}
+        </span>)}</div>
+      </li>)}</ul>
+    </section>}
   </section>;
 }

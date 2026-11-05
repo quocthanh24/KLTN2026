@@ -177,10 +177,10 @@ class ChatService:
             pass
         return result
 
-    async def attachment_download_url(self, principal: Principal, attachment_id: UUID) -> str:
+    async def attachment_content(self, principal: Principal, attachment_id: UUID):
         async with self.transaction(principal):
             attachment = await self.attachments.get_with_message(attachment_id)
-            if attachment is None or attachment.message.deleted_at is not None:
+            if attachment is None or attachment.message is None or attachment.message.deleted_at is not None:
                 raise AppError(404, "ATTACHMENT_NOT_FOUND", "Không tìm thấy tệp đính kèm")
             try:
                 await self.channel_access(attachment.message.channel_id, principal.user.id)
@@ -188,12 +188,13 @@ class ChatService:
                 if exc.code == "CHANNEL_ACCESS_DENIED":
                     raise AppError(403, "ATTACHMENT_ACCESS_DENIED", "Bạn không có quyền tải tệp") from exc
                 raise
-            storage_key = attachment.storage_key
-            filename = attachment.original_filename
-        try:
-            return await (self.storage or get_storage_service()).temporary_download_url(storage_key, filename)
-        except Exception as exc:
-            raise AppError(503, "ATTACHMENT_DOWNLOAD_FAILED", "Không thể tạo liên kết tải tệp") from exc
+            try:
+                data=await (self.storage or get_storage_service()).read_document(
+                    attachment.storage_key,get_settings().attachment_max_size_bytes)
+                if len(data)!=attachment.size_bytes:raise ValueError('Attachment size mismatch')
+            except Exception:
+                raise AppError(503,'ATTACHMENT_DOWNLOAD_FAILED','Không thể tải tệp đính kèm') from None
+            return data,attachment.content_type,attachment.original_filename
 
     async def edit(self, principal: Principal, message_id: UUID, request: MessageRequest):
         content = self.valid_content(request.content)

@@ -28,6 +28,7 @@ from app.core.config import get_settings
 from app.core.security import create_access_token
 from app.models import AuthSession, User, Workspace, WorkspaceInvitation, WorkspaceMember
 from app.models.enums import InvitationStatus, SystemRole, WorkspaceRole
+from app.db.base import Base
 from app.repositories.workspace_invitation_repository import WorkspaceInvitationRepository
 from app.repositories.workspace_member_repository import WorkspaceMemberRepository
 from app.repositories.workspace_repository import WorkspaceRepository
@@ -42,10 +43,10 @@ async def require_empty_database():
     try:
         async with engine.connect() as conn:
             tables = set(await conn.run_sync(lambda c: inspect(c).get_table_names()))
-            if tables - {'alembic_version', *(m.__tablename__ for m in MODELS)}:
+            if tables - {'alembic_version', *Base.metadata.tables}:
                 raise RuntimeError('Refusing unrelated tables in kltn_test')
-            for model in MODELS:
-                if model.__tablename__ in tables and await conn.scalar(select(func.count()).select_from(model)):
+            for table in Base.metadata.sorted_tables:
+                if table.name in tables and await conn.scalar(select(func.count()).select_from(table)):
                     raise RuntimeError('Requires empty kltn_test; refusing existing data')
     finally:
         await engine.dispose()

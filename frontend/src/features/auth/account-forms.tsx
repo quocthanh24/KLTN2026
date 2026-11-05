@@ -31,24 +31,20 @@ export function RegisterForm() {
 
 export function LoginForm({ registered }: { registered: boolean }) {
   const submit = useSubmission(); const router = useRouter();
-  return (
-    <div className="auth-card">
-      <p className="kicker">Chào mừng trở lại</p>
-      <h1>Đăng nhập</h1>
-      {registered && <p role="status" className="success">Đăng ký thành công. Vui lòng đăng nhập.</p>}
-      <form noValidate onSubmit={event => {
-        const data = formValues(event); const body = { email: value(data, "email").trim(), password: value(data, "password") };
-        void submit.run(async () => { await authStore.login(body); const next = new URLSearchParams(window.location.search).get("next"); router.replace(next?.startsWith("/invitations/") ? next : "/app"); }, validate(body));
-      }}><fieldset disabled={submit.pending}>
-        <Field label="Email" name="email" type="email" autoComplete="username" required errors={submit.fields} />
-        <Field label="Mật khẩu" name="password" type="password" autoComplete="current-password" required errors={submit.fields} />
-        <button disabled={submit.pending}>{submit.pending ? "Đang đăng nhập…" : "Đăng nhập"}</button>
-      </fieldset><Feedback {...submit} /></form>
-      <p><Link href="/register">Đăng ký tài khoản</Link></p>
-    </div>
-  );
+  return <><h1>Đăng nhập</h1>{registered && <p role="status">Đăng ký thành công. Vui lòng đăng nhập.</p>}<form noValidate onSubmit={event => {
+    const data = formValues(event); const body = { email: value(data, "email").trim(), password: value(data, "password") };
+    void submit.run(async () => { await authStore.login(body); const next = new URLSearchParams(window.location.search).get("next"); router.replace(next?.startsWith("/invitations/") ? next : "/app"); }, validate(body));
+  }}><fieldset disabled={submit.pending}>
+    <Field label="Email" name="email" type="email" autoComplete="username" required errors={submit.fields} />
+    <Field label="Mật khẩu" name="password" type="password" autoComplete="current-password" required errors={submit.fields} />
+    <button disabled={submit.pending}>{submit.pending ? "Đang đăng nhập…" : "Đăng nhập"}</button>
+  </fieldset><Feedback {...submit} /></form><p><Link href="/register">Đăng ký tài khoản</Link></p></>;
 }
-
+export function Landing() {
+  const { user } = useAuth(); const submit = useSubmission(); const router = useRouter();
+  return <><h1>Xin chào, {user?.full_name}</h1><p>Bạn đã đăng nhập.</p><nav><Link href="/workspaces">Workspace</Link><Link href="/profile">Thông tin cá nhân</Link><Link href="/settings/security">Đổi mật khẩu</Link></nav>
+    <button disabled={submit.pending} onClick={() => void submit.run(async () => { await authStore.logout(); router.replace("/login"); })}>{submit.pending ? "Đang đăng xuất…" : "Đăng xuất"}</button><Feedback {...submit} /></>;
+}
 export function ProfileForm() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadError, setLoadError] = useState(false);

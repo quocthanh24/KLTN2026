@@ -1,4 +1,4 @@
-"""Ephemeral presence for a single backend worker; no study history is stored."""
+"""Ephemeral single-worker presence; durable UC37 history lives in PostgreSQL."""
 from datetime import UTC, datetime
 from time import monotonic
 from app.core.exceptions import AppError
@@ -48,3 +48,17 @@ class RoomPresence:
 
 
 room_presence = RoomPresence()
+
+# Meaningful timer snapshots are pushed immediately. Existing heartbeat snapshots
+# additionally recover missed events and converge across backend workers.
+pomodoro_sockets = {}
+
+
+async def publish_pomodoro(channel_id, snapshot):
+    import asyncio
+    data = {key: value for key, value in snapshot.items() if key != "can_control"}
+    sockets = [socket for socket, room in list(pomodoro_sockets.items()) if room == channel_id]
+    from app.realtime.moderation import permitted
+    async def send(socket):
+        if await permitted(socket):await socket.send_json({"type":"pomodoro.state","data":data})
+    await asyncio.gather(*(send(socket) for socket in sockets),return_exceptions=True)

@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
+from app.db import moderation_filters  # register visibility policy before serving queries
 
 engine = create_async_engine(str(get_settings().database_url), pool_pre_ping=True)
 session_factory = async_sessionmaker(engine, expire_on_commit=False)

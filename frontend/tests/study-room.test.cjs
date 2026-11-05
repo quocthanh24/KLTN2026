@@ -218,3 +218,26 @@ test('pending screen picker cannot duplicate or publish after leaving', async ()
   f.media.close(); resolve(track); await start;
   assert.ok(track.stopped); assert.equal(f.room.localParticipant.trackPublications.size, 0);
 });
+
+test('reconnect retains last-known snapshot then replaces missed users and restores participation OFF', t => {
+  const f = fixture(t), ws = f.sockets[0];
+  const old = { self_state: 'IN_ROOM', participants: [{ user_id: 'a' }, { user_id: 'b', camera_enabled: true }] };
+  f.client.command('join');
+  ws.onmessage({ data: JSON.stringify({ type: 'room.state', data: old }) });
+  f.client.devices({ camera_enabled: true });
+  ws.onclose({ code: 1001 });
+  assert.deepEqual(f.states.at(-1), old);
+  f.client.reconnect();
+  const next = f.sockets[1]; next.onopen();
+  next.onmessage({ data: JSON.stringify({ type: 'room.state', data: { self_state: 'LEFT', participants: [] } }) });
+  assert.equal(next.frames.at(-1).type, 'join');
+  assert.deepEqual(f.states.at(-1), old);
+  next.onmessage({ data: JSON.stringify({ type: 'room.state', data: { self_state: 'IN_ROOM', participants: [{ user_id: 'a' }] } }) });
+  assert.deepEqual(next.frames.at(-1), { type: 'devices', microphone_enabled: false, camera_enabled: false, screen_sharing: false });
+  const recovered = { self_state: 'IN_ROOM', participants: [{ user_id: 'a' }, { user_id: 'c', screen_sharing: true }] };
+  next.onmessage({ data: JSON.stringify({ type: 'room.state', data: recovered }) });
+  next.onmessage({ data: JSON.stringify({ type: 'room.state', data: recovered }) });
+  assert.deepEqual(f.states.at(-1), recovered);
+  assert.equal(f.states.at(-1).participants.length, 2);
+  f.client.close();
+});

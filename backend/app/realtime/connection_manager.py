@@ -23,6 +23,10 @@ class ChannelConnectionManager:
         dead: list[WebSocket] = []
         for websocket in tuple(self._connections.get(channel_id, ())):
             try:
+                from app.realtime.moderation import permitted
+                if not await permitted(websocket):
+                    dead.append(websocket)
+                    continue
                 await websocket.send_json(event)
             except Exception:
                 dead.append(websocket)

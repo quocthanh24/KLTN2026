@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, String, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, Enum, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.core.normalization import normalize_email
@@ -13,9 +13,11 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint("email = lower(btrim(email))", name="ck_users_email_normalized"),
+        CheckConstraint('admin_version >= 1',name='ck_users_admin_version'),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    admin_version: Mapped[int] = mapped_column(Integer,default=1,server_default='1')
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)

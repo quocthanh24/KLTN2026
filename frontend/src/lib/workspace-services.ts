@@ -1,9 +1,10 @@
 import { createApiClient, type AuthBridge } from "./api";
+import { invitationToken } from "./invitation-token";
 import type { Workspace, WorkspaceInput, WorkspaceMember, Invitation, InvitationInput, InvitationPreview } from "./workspace-types";
 export function createWorkspaceServices(bridge: AuthBridge) {
   const api = createApiClient(bridge);
   const path = (id: string) => `/workspaces/${encodeURIComponent(id)}`;
-  const invitation = (token: string) => `/workspace-invitations/${encodeURIComponent(token)}`;
+  const invitation = (token: string) => `/workspace-invitations/${encodeURIComponent(invitationToken(token))}`;
   return {
     list: () => api<Workspace[]>("/workspaces", { protected: true }),
     create: (body: WorkspaceInput) => api<Workspace>("/workspaces", { method: "POST", body, protected: true }),

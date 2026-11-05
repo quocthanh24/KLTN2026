@@ -9,6 +9,7 @@ import { workspaceServices as api } from "@/features/auth/store";
 import { useAuth } from "@/features/auth/provider";
 import type { Workspace, WorkspaceInput, WorkspaceMember } from "@/lib/workspace-types";
 import { WorkspaceChannels } from "@/features/chat/views";
+import { invitationToken } from "@/lib/invitation-token";
 
 function useLoad<T>(load: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null);

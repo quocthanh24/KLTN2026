@@ -12,7 +12,23 @@ const python = process.env.LIVE_PYTHON || path.join(backendDir, '.venv-win/Scrip
 const marker = `phase3e-${randomUUID()}`;
 const accounts = ['owner', 'member', 'outsider'].map(role => ({ role, email: `${marker}-${role}@example.com`, password: randomBytes(24).toString('base64url'), token: null }));
 const emails = accounts.map(a => a.email);
-const content = Buffer.from('Phase 3E real browser -> FastAPI -> PostgreSQL -> private MinIO\n');
+const pdfTest = process.argv.includes('--attachment-pdf');
+const filename = process.env.ATTACHMENT_TEST_FILENAME || (pdfTest ? 'Bài tập tiếng Việt.pdf' : 'phase3e-live.txt');
+function pdfFixture() {
+  let pdf = '%PDF-1.7\n'; const offsets = [0];
+  const stream = 'BT /F1 24 Tf 50 750 Td (Attachment regression) Tj ET\n';
+  for (const object of ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}endstream`]) {
+    offsets.push(Buffer.byteLength(pdf)); pdf += `${offsets.length - 1} 0 obj\n${object}\nendobj\n`;
+  }
+  pdf += '%' + 'x'.repeat(177 * 1024 - Buffer.byteLength(pdf) - 256) + '\n';
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+const content = process.env.ATTACHMENT_TEST_FILE ? require('node:fs').readFileSync(process.env.ATTACHMENT_TEST_FILE) : pdfTest ? pdfFixture() : Buffer.from('Phase 3E real browser -> FastAPI -> PostgreSQL -> private MinIO\n');
+const downloadLabel = `Tải ${filename} (${Math.ceil(content.length / 1024)} KB)`;
 const sha256 = createHash('sha256').update(content).digest('hex');
 let checks = 0;
 function pass(name) { checks++; console.log(`PASS ${checks}: ${name}`); }
@@ -37,6 +53,7 @@ async function login(browser, account) {
   page.on('pageerror', error => errors.push(error.message));
   // Observe actual network sockets, without replacing the browser implementation.
   page.on('websocket', socket => {
+    if (!socket.url().includes('/api/v1/ws/channels/')) return;
     sockets.push(socket);
     socket.on('framereceived', ({ payload }) => {
       const frame = JSON.parse(payload.toString()); frames.push({ channel: socket.url().split('/').at(-1), type: frame.type, id: frame.data?.id ?? frame.data?.message_id });
@@ -153,23 +170,30 @@ async function messageVisible(session, id, text) {
       assert.ok(await p.getByRole('button', { name: 'Gửi tin nhắn', exact: true }).isDisabled());
       assert.ok(await p.locator('.message-composer [role="alert"]').isVisible());
     }
-    await p.getByLabel('Đính kèm tệp (tối đa 25 MB)').setInputFiles({ name: 'phase3e-live.txt', mimeType: 'text/plain', buffer: content });
+    await p.getByLabel('Đính kèm tệp (tối đa 25 MB)').setInputFiles({ name: filename, mimeType: pdfTest ? 'application/pdf' : 'text/plain', buffer: content });
     const uploadedResponse = p.waitForResponse(r => r.url().endsWith(`/channels/${created.id}/messages/attachments`) && r.request().method() === 'POST');
     await p.getByRole('button', { name: 'Gửi tin nhắn', exact: true }).click();
     const uploadResponse = await uploadedResponse; assert.equal(uploadResponse.status(), 201); const uploaded = (await uploadResponse.json()).data; const attachment = uploaded.attachments[0];
     assert.equal(uploaded.content, null); assert.deepEqual(Object.keys(attachment).sort(), ['content_type', 'id', 'original_filename', 'size_bytes']);
-    const downloadButton = b.page.getByRole('button', { name: 'Tải phase3e-live.txt (1 KB)', exact: true }); await downloadButton.waitFor();
+    const downloadButton = b.page.getByRole('button', { name: downloadLabel, exact: true }); await downloadButton.waitFor();
+    const relayEvent = b.page.waitForResponse(r => r.url().endsWith(`/api/attachments/${attachment.id}/download`));
     const downloadEvent = b.page.waitForEvent('download'); await downloadButton.click(); const download = await downloadEvent;
+    const relay = await relayEvent;
+    assert.equal(relay.status(), 200); assert.equal(relay.headers()['content-type'].split(';')[0],attachment.content_type);
     const stream = await download.createReadStream(); const bytes = []; for await (const chunk of stream) bytes.push(chunk);
     assert.equal(createHash('sha256').update(Buffer.concat(bytes)).digest('hex'), sha256);
-    const signed = await api(member, 'GET', `/attachments/${attachment.id}/download`, null, 307);
-    const object = await fetch(signed.headers.get('location')); assert.equal(object.status, 200);
+    assert.equal(download.suggestedFilename(), filename);
+    await downloadButton.waitFor(); assert.ok(await downloadButton.isEnabled());
+    assert.equal(await b.page.getByText('Có lỗi xảy ra. Vui lòng thử lại.', { exact: true }).count(), 0);
+    const object = await fetch(`${backend}/api/v1/attachments/${attachment.id}/download`,{headers:{Authorization:'Bearer '+member.token},redirect:'manual'}); assert.equal(object.status, 200);
+    assert.equal(object.headers.get('location'),null);
+    assert.equal(object.headers.get('content-type').split(';')[0], attachment.content_type);
     assert.equal(createHash('sha256').update(Buffer.from(await object.arrayBuffer())).digest('hex'), sha256);
-    pass('real browser attachment-only upload, second-user download and presigned content integrity');
+    pass('real browser attachment-only upload, second-user authorized download and original content integrity without storage grant');
     await openChannel(a, workspace, 'live-renamed'); await openChannel(b, workspace, 'live-renamed');
     own = await messageVisible(a, sent.id, 'Live edited persistent');
     await own.getByText('Đã chỉnh sửa', { exact: true }).waitFor(); await own.locator('.reactions').getByText('👍 1', { exact: true }).waitFor();
-    await b.page.getByRole('button', { name: 'Tải phase3e-live.txt (1 KB)', exact: true }).waitFor();
+    await b.page.getByRole('button', { name: downloadLabel, exact: true }).waitFor();
     assert.equal(await b.page.locator(`[data-message-id="${removed.id}"]`).count(), 0);
     pass('full page reload restores channels/messages/edit/reaction/attachment from PostgreSQL');
     await api(member, 'PATCH', `/messages/${sent.id}`, { content: 'denied' }, 403, 'MESSAGE_PERMISSION_DENIED');
@@ -225,7 +249,7 @@ async function messageVisible(session, id, text) {
     assert.ok(b.frames.some(f => f.id === afterReconnect.id && f.type === 'message.created'));
     await cdp.send('Runtime.releaseObjectGroup', { objectGroup: 'phase3e-reconnect' }); await cdp.detach();
     pass('actual socket disconnect/reconnect, missed-history recovery and resumed remote events');
-    inspect({ action: 'inspect', workspace_id: workspace.id, deleted_channel_id: disposable.id, edited_message_id: sent.id, deleted_message_id: removed.id, attachment_id: attachment.id, sha256 });
+    inspect({ action: 'inspect', workspace_id: workspace.id, deleted_channel_id: disposable.id, edited_message_id: sent.id, deleted_message_id: removed.id, attachment_id: attachment.id, sha256, filename });
     pass('direct PostgreSQL rows, physical private MinIO object, hash and anonymous AccessDenied');
     for (const session of sessions) assert.deepEqual(session.errors, []);
     console.log(`LIVE PASS: ${checks} scenarios; no mocked API or WebSocket`);

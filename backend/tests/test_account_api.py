@@ -24,6 +24,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import get_settings
 from app.core.security import decode_access_token, hash_refresh_token, verify_password
 from app.models import AuthSession, User
+from app.db.base import Base
 
 BACKEND = Path(__file__).resolve().parents[1]
 PASSWORD = 'Account-test-123'
@@ -37,11 +38,11 @@ async def check_database():
     try:
         async with engine.connect() as connection:
             tables = await connection.run_sync(lambda c: inspect(c).get_table_names())
-            if set(tables) - {'users', 'auth_sessions', 'alembic_version'}:
+            if set(tables) - {'alembic_version', *Base.metadata.tables}:
                 raise RuntimeError('Refusing test database containing unrelated tables')
-            for model in (User, AuthSession):
-                if model.__tablename__ in tables:
-                    if await connection.scalar(select(func.count()).select_from(model)):
+            for table in Base.metadata.sorted_tables:
+                if table.name in tables:
+                    if await connection.scalar(select(func.count()).select_from(table)):
                         raise RuntimeError('Refusing test database containing account data')
     finally:
         await engine.dispose()

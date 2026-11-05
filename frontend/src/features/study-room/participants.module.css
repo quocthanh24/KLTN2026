@@ -1,0 +1,8 @@
+.participants { margin-top: 20px; padding: 16px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f8fafc; color: #172033; }
+.participants h4 { margin: 0 0 8px; }
+.participants p { font-size: 14px; }
+.participants ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.participants li { padding: 12px; border-radius: 8px; background: white; border: 1px solid #e2e8f0; overflow-wrap: anywhere; }
+.statuses { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.statuses > span { font-size: 13px; border-radius: 6px; padding: 5px 8px; background: #e2e8f0; }
+.statuses > span[data-enabled="true"] { background: #dcfce7; color: #14532d; }

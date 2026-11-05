@@ -138,6 +138,8 @@ class AuthService:
         async with self.db.begin():
             current = await self.load_principal(principal.user.id, principal.session.id)
             await self.sessions.revoke(current.session.id, now=datetime.now(UTC))
+            from app.services.media_authority import revoke_in_transaction
+            await revoke_in_transaction(self.db,'SESSION',current.session.id,current.user.id)
 
     @staticmethod
     def require_active(user: User) -> None:

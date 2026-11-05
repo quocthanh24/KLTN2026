@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from uuid import UUID
 
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +25,16 @@ class ChannelService:
 
     @asynccontextmanager
     async def transaction(self, principal: Principal):
+        # Rollback expires ORM attributes even with expire_on_commit=False.
+        # Read immutable identities without implicit async IO, then reauthorize
+        # and reload the user/session in the normal transaction below.
+        user_state=inspect(principal.user,raiseerr=False)
+        session_state=inspect(principal.session,raiseerr=False)
+        user_id=user_state.identity[0] if user_state is not None and user_state.identity else principal.user.id
+        session_id=session_state.identity[0] if session_state is not None and session_state.identity else principal.session.id
         try:
             async with self.db.begin():
-                await AuthService(self.db).load_principal(principal.user.id, principal.session.id)
+                await AuthService(self.db).load_principal(user_id, session_id)
                 yield
         except IntegrityError as exc:
             cause = exc.orig.__cause__
@@ -104,4 +112,6 @@ class ChannelService:
             channel = await self.channel_access(channel_id, principal.user.id, self.MANAGERS)
             if channel.is_default:
                 raise AppError(403, "DEFAULT_CHANNEL_CANNOT_BE_DELETED", "Không thể xóa Channel mặc định")
+            from app.services.media_authority import revoke_in_transaction
+            await revoke_in_transaction(self.db,'CHANNEL',channel_id,principal.user.id)
             await self.channels.delete(channel)
