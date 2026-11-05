@@ -11,7 +11,7 @@ function MediaTrack({ track, local }: { track: Track; local: boolean }) {
   useEffect(() => {
     if (local && track.kind === Track.Kind.Audio) return;
     const element = track.attach();
-    if (element instanceof HTMLVideoElement) { element.playsInline = true; element.style.width = "100%"; element.style.maxWidth = "360px"; }
+    if (element instanceof HTMLVideoElement) { element.playsInline = true; element.style.width = "100%"; element.style.height = "180px"; element.style.objectFit = track.source === Track.Source.ScreenShare ? "contain" : "cover"; }
     element.autoplay = true; element.muted = local;
     container.current?.appendChild(element);
     return () => { track.detach(element); element.remove(); };
@@ -44,15 +44,15 @@ export function MediaPanel({ id, sync, onDisconnect }: { id: string; sync: (devi
   const own = state.participants.find(p => p.local);
   return <section aria-label="Media phòng học">
     <p role="status">{state.status}</p>{error && <p role="alert">{error}</p>}
-    <div className="actions">{(["microphone_enabled", "camera_enabled"] as const).map(field => <button key={field}
+    <div className="actions media-controls">{(["microphone_enabled", "camera_enabled"] as const).map(field => <button key={field}
       disabled={!state.connected || pending} aria-pressed={own?.[field] ?? false}
       onClick={() => { setPending(true); void client.current?.toggle(field, !own?.[field]).finally(() => setPending(false)); }}>
       {field === "microphone_enabled" ? "Microphone" : "Camera"}: {own?.[field] ? "ON" : "OFF"}
     </button>)}<button disabled={!state.connected || pending} aria-pressed={own?.screen_sharing ?? false}
       onClick={() => { setPending(true); void client.current?.toggle("screen_sharing", !own?.screen_sharing).finally(() => setPending(false)); }}>
       {own?.screen_sharing ? "Dừng chia sẻ màn hình" : "Chia sẻ màn hình"}
-    </button><button disabled={!state.connected} onClick={() => void client.current?.startAudio()}>Cho phép phát âm thanh</button></div>
-    {state.participants.map(person => <article key={person.identity} aria-label={`Media ${person.name}`}>
+    </button><button type="button" className="secondary" disabled={!state.connected} onClick={() => void client.current?.startAudio()}>Cho phép phát âm thanh</button></div>
+    <div className="media-grid">{state.participants.map(person => <article className="media-tile" key={person.identity} aria-label={`Media ${person.name}`}>
       <h4>{person.name}{person.local ? " (Bạn)" : ""}</h4>
       <p>Microphone: {person.microphone_enabled ? "ON" : "OFF"} · Camera: {person.camera_enabled ? "ON" : "OFF"}</p>
       <p>Màn hình: {person.screen_sharing ? "ON" : "OFF"}</p>
@@ -61,6 +61,6 @@ export function MediaPanel({ id, sync, onDisconnect }: { id: string; sync: (devi
         {track.source === Track.Source.Camera && <h5>Camera — {person.name}</h5>}
         <MediaTrack track={track} local={person.local} />
       </div>)}
-    </article>)}
+    </article>)}</div>
   </section>;
 }

@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Field, Feedback, formValues, useSubmission, value } from "@/components/forms";
+import { initials } from "@/components/shell";
 import { chatServices as api } from "@/features/auth/store";
 import { useAuth } from "@/features/auth/provider";
 import type { Channel, ChannelInput, Message } from "@/lib/chat-types";
@@ -39,30 +40,38 @@ export function WorkspaceChannels({ workspace }: { workspace: Workspace }) {
     return () => { active = false; };
   }, [workspace.id, attempt]);
   const channel = channels?.find(c => c.id === selected);
+  const text = channels?.filter(item => item.type === "TEXT") ?? [];
+  const rooms = channels?.filter(item => item.type === "STUDY_ROOM") ?? [];
+  const pick = (item: Channel) => { setSelected(item.id); setForm(null); submit.reset(); };
   return <section className="workspace-chat" aria-label="Channel và Chat">
     <aside className="channel-sidebar"><h2>Channels</h2>
       {error && <><p role="alert" className="error">{error}</p><button onClick={() => { setError(""); setAttempt(a => a + 1); }}>Tải lại Channel</button></>}
       {!channels && !error && <p role="status">Đang tải Channel…</p>}
       {channels?.length === 0 && <p>Workspace chưa có Channel.</p>}
-      <nav aria-label="Danh sách Channel">{channels?.map(item => <button key={item.id} aria-current={selected === item.id ? "page" : undefined} onClick={() => { setSelected(item.id); setForm(null); submit.reset(); }}><span>{item.type === "TEXT" ? "#" : "◇"} {item.name}</span><small>{item.type}</small></button>)}</nav>
+      {channels && <>
+        {text.length > 0 && <><p className="channel-group">Chat</p>
+          <nav aria-label="Danh sách Channel">{text.map(item => <button key={item.id} aria-current={selected === item.id ? "page" : undefined} onClick={() => pick(item)}><span># {item.name}</span><small>{item.type}</small></button>)}</nav></>}
+        {rooms.length > 0 && <><p className="channel-group">Phòng học</p>
+          <nav aria-label="Phòng tự học">{rooms.map(item => <button key={item.id} aria-current={selected === item.id ? "page" : undefined} onClick={() => pick(item)}><span>◇ {item.name}</span><small>{item.type}</small></button>)}</nav></>}
+      </>}
       {manager && <button onClick={() => { setForm("create"); submit.reset(); }}>Tạo Channel</button>}
     </aside>
     <div className="channel-main"><Feedback {...submit} />
-      {form === "create" && manager && <ChannelForm cancel={() => setForm(null)} save={async body => {
+      {form === "create" && manager && <div style={{ padding: 16 }}><ChannelForm cancel={() => setForm(null)} save={async body => {
         const created = await api.createChannel(workspace.id, body); setChannels(current => [...(current ?? []), created]); setSelected(created.id); setForm(null); submit.setSuccess("Đã tạo Channel.");
-      }} />}
+      }} /></div>}
       {channel ? <><header className="channel-header"><h2>{channel.type === "TEXT" ? "#" : "◇"} {channel.name}</h2><p className="description">{channel.description}</p>
-        {manager && <div className="actions"><button onClick={() => setForm("edit")}>Sửa Channel</button>{!channel.is_default && <button disabled={submit.pending} onClick={() => {
+        {manager && <div className="actions"><button type="button" className="secondary" onClick={() => setForm("edit")}>Sửa Channel</button>{!channel.is_default && <button type="button" className="danger" disabled={submit.pending} onClick={() => {
           if (window.confirm(`Xóa Channel “${channel.name}” và dữ liệu liên quan?`)) void submit.run(async () => {
             await api.deleteChannel(channel.id); const remaining = (channels ?? []).filter(c => c.id !== channel.id); setChannels(remaining); setSelected((remaining.find(c => c.is_default) ?? remaining[0])?.id ?? ""); setForm(null); submit.setSuccess("Đã xóa Channel.");
           });
         }}>Xóa Channel</button>}</div>}
       </header>
-        {form === "edit" && manager && <ChannelForm key={`edit-${channel.id}`} channel={channel} cancel={() => setForm(null)} save={async ({ name, description }) => {
+        {form === "edit" && manager && <div style={{ padding: 16 }}><ChannelForm key={`edit-${channel.id}`} channel={channel} cancel={() => setForm(null)} save={async ({ name, description }) => {
           const updated = await api.updateChannel(channel.id, { name, description }); setChannels(current => current?.map(c => c.id === updated.id ? updated : c) ?? []); setForm(null); submit.setSuccess("Đã cập nhật Channel.");
-        }} />}
+        }} /></div>}
         {channel.type === "TEXT" ? <ChatPanel key={channel.id} channel={channel} /> : <StudyRoom key={channel.id} channel={channel} />}
-      </> : channels && <p>Chọn một Channel để bắt đầu.</p>}
+      </> : channels && <p style={{ padding: 16 }}>Chọn một Channel để bắt đầu.</p>}
     </div>
   </section>;
 }
@@ -72,6 +81,7 @@ function MessageItem({ message, chat }: { message: Message; chat: ReturnType<typ
   const [editing, setEditing] = useState(false);
   const own = message.sender.id === user?.id;
   return <li className="chat-message" data-message-id={message.id}>
+    <span className="avatar" aria-hidden>{initials(message.sender.full_name)}</span>
     <div className="message-meta"><strong>{message.sender.full_name}</strong><time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString("vi-VN")}</time>{message.edited_at && <small>Đã chỉnh sửa</small>}</div>
     {editing ? <form onSubmit={event => { const content = value(formValues(event), "content").trim(); void submit.run(async () => { chat.saved(await api.edit(message.id, content)); setEditing(false); }, content ? {} : { content: ["Nội dung không được để trống."] }); }}>
       <label htmlFor={`edit-${message.id}`}>Sửa tin nhắn</label><textarea id={`edit-${message.id}`} name="content" defaultValue={message.content ?? ""} disabled={submit.pending} required />
@@ -82,11 +92,11 @@ function MessageItem({ message, chat }: { message: Message; chat: ReturnType<typ
       const blob = await api.download(file.id); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = file.original_filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     })}>Tải {file.original_filename} ({Math.ceil(file.size_bytes / 1024)} KB)</button>)}
     <div className="reactions" aria-label="Cảm xúc">{message.reactions.map(reaction => <span key={reaction.emoji}>{reaction.emoji} {reaction.count}</span>)}</div>
-    <details><summary>Thêm / gỡ cảm xúc</summary><div className="actions">{[...new Set(["👍", "❤️", "🎉", ...message.reactions.map(r => r.emoji)])].map(emoji => <div key={emoji} className="reaction-actions">
+    <details><summary>Thêm / gỡ cảm xúc</summary><div className="actions">{[...new Set(["👍", "❤️", "🎉", "😂", "✅", ...message.reactions.map(r => r.emoji)])].map(emoji => <div key={emoji} className="reaction-actions">
       <button aria-label={`Thêm ${emoji}`} disabled={submit.pending} onClick={() => void submit.run(() => chat.react(message.id, emoji))}>{emoji} +</button>
       <button aria-label={`Gỡ ${emoji} của tôi`} disabled={submit.pending} onClick={() => void submit.run(() => chat.react(message.id, emoji, true))}>{emoji} −</button>
     </div>)}</div><small>Gỡ chỉ áp dụng cho cảm xúc của bạn.</small></details>
-    {own && !editing && <div className="actions message-actions"><button onClick={() => { submit.reset(); setEditing(true); }}>Sửa tin nhắn</button><button disabled={submit.pending} onClick={() => {
+    {own && !editing && <div className="actions message-actions"><button type="button" className="secondary" onClick={() => { submit.reset(); setEditing(true); }}>Sửa tin nhắn</button><button type="button" className="danger" disabled={submit.pending} onClick={() => {
       if (window.confirm("Xóa tin nhắn này?")) void submit.run(async () => { await api.remove(message.id); chat.receive({ type: "message.deleted", data: { message_id: message.id } }); });
     }}>Xóa tin nhắn</button></div>}
     {submit.pending && <p role="status">Đang xử lý…</p>}<Feedback {...submit} />
@@ -97,18 +107,30 @@ function ChatPanel({ channel }: { channel: Channel }) {
   const chat = useChat(channel.id); const submit = useSubmission();
   const [content, setContent] = useState(""); const [file, setFile] = useState<File | null>(null); const [fileError, setFileError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
-  return <div className="chat-panel"><p className="connection-status" role="status">{chat.connection}</p>
+  const listRef = useRef<HTMLOListElement>(null);
+  const stick = useRef(true);
+  useLayoutEffect(() => {
+    if (!stick.current) return;
+    listRef.current?.lastElementChild?.scrollIntoView({ block: "end" });
+  }, [chat.messages, chat.loading]);
+  return <div className="chat-panel"><p className={`connection-status ${chat.connection === "Đã kết nối" ? "ok" : ""}`} role="status">{chat.connection}</p>
     {chat.error && <p role="alert" className="error">{chat.error}</p>}
-    <div className="actions"><button disabled={chat.loading} onClick={() => void chat.load()}>Tải lại tin nhắn</button>{chat.more && <button disabled={chat.loading} onClick={() => void chat.load(true)}>Tin nhắn cũ hơn</button>}</div>
+    <div className="actions"><button type="button" className="secondary" disabled={chat.loading} onClick={() => { stick.current = true; void chat.load(); }}>Tải lại tin nhắn</button>{chat.more && <button type="button" className="secondary" disabled={chat.loading} onClick={() => { stick.current = false; void chat.load(true); }}>Tin nhắn cũ hơn</button>}</div>
     {chat.loading && <p role="status">Đang tải tin nhắn…</p>}
     {!chat.loading && !chat.error && !chat.messages.length && <p>Chưa có tin nhắn. Hãy bắt đầu cuộc trò chuyện.</p>}
-    <ol className="message-list" aria-label="Tin nhắn">{chat.messages.map(message => <MessageItem key={message.id} message={message} chat={chat} />)}</ol>
+    <ol className="message-list" aria-label="Tin nhắn" ref={listRef} onScroll={event => {
+      const node = event.currentTarget;
+      stick.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+    }}>{chat.messages.map(message => <MessageItem key={message.id} message={message} chat={chat} />)}</ol>
     <form className="message-composer" onSubmit={event => {
       event.preventDefault();
       if ((!content.trim() && !file) || fileError) return;
+      stick.current = true;
       void submit.run(async () => { const sent = file ? await api.upload(channel.id, file, content) : await api.send(channel.id, content.trim()); chat.saved(sent); setContent(""); setFile(null); if (fileInput.current) fileInput.current.value = ""; });
     }}><fieldset disabled={submit.pending}>
-      <label htmlFor="message-content">Nhắn vào #{channel.name}</label><textarea id="message-content" value={content} onChange={event => setContent(event.target.value)} placeholder="Viết tin nhắn…" />
+      <label htmlFor="message-content">Nhắn vào #{channel.name}</label><textarea id="message-content" value={content} onChange={event => setContent(event.target.value)} placeholder="Viết tin nhắn cho nhóm học… Enter để gửi, Shift+Enter xuống dòng" onKeyDown={event => {
+        if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
+      }} />
       <label htmlFor="message-file">Đính kèm tệp (tối đa 25 MB)</label><input ref={fileInput} id="message-file" type="file" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg" onChange={event => {
         const selected = event.target.files?.[0] ?? null; setFile(selected); setFileError(selected ? validateFile(selected) : "");
       }} />

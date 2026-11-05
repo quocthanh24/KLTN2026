@@ -12,6 +12,13 @@ export function AuthGuard({ children, guest = false }: { children: ReactNode; gu
   const router = useRouter();
   const redirect = guest ? authStatus === "authenticated" : authStatus === "unauthenticated";
   useEffect(() => { if (redirect) router.replace(guest ? (new URLSearchParams(window.location.search).get("next")?.startsWith("/invitations/") ? new URLSearchParams(window.location.search).get("next")! : "/app") : `/login?next=${encodeURIComponent(window.location.pathname)}`); }, [redirect, guest, router]);
-  if (authStatus === "loading" || redirect) return <p role="status">Đang kiểm tra phiên đăng nhập…</p>;
+  if (authStatus === "loading" || redirect) {
+    return (
+      <div className="splash">
+        <p className="kicker">KLTN</p>
+        <p role="status">Đang kiểm tra phiên đăng nhập…</p>
+      </div>
+    );
+  }
   return children;
 }
