@@ -3,7 +3,7 @@ import { ReportButton } from "@/features/administration/report-button";
 import { useEffect, useRef, useState } from "react";
 import { chatAuth, clearAuth } from "@/features/auth/store";
 import { ApiFailure, createApiClient } from "@/lib/api";
-import { documentFileError, DOCUMENT_TYPES, type LearningDocument } from "./contracts";
+import { documentFileError, documentPresentation, documentProcessingError, DOCUMENT_TYPES, type LearningDocument } from "./contracts";
 import styles from "./documents.module.css";
 import Image from "next/image";
 import { PdfViewer } from "./pdf-viewer";
@@ -11,6 +11,41 @@ import { OriginalPageViewer } from "./original-page-viewer";
 import { OriginalDocxViewer } from "./original-docx-viewer";
 
 const api = createApiClient({ ...chatAuth, clear: clearAuth });
+function DocumentProcessing({ document, busy, retry }: {
+  document: LearningDocument;
+  busy: boolean;
+  retry: (units?: number[]) => void;
+}) {
+  const [selection, setSelection] = useState("");
+  const state = document.derived_state;
+  const processing = document.status === "PROCESSING";
+  const blocker = state?.retry_blocker;
+  const canRetryUnits = !!state?.total_units && !!state.counts?.ERROR;
+  const parts = selection.split(",").map(part => part.trim());
+  const units = [...new Set(parts.map(Number))];
+  const validUnits = parts.length <= 16 && parts.every(part => /^\d+$/.test(part)) &&
+    units.every(unit => unit >= 1 && unit <= (state?.total_units ?? 0));
+  const presentation = documentPresentation(document);
+  return <details className={styles.processing}>
+    <summary>Quản lý xử lý AI</summary>
+    <p role="status"><strong>{presentation.label}</strong> · {presentation.description}</p>
+    {document.processing_error && <p>{documentProcessingError(document.processing_error)}</p>}
+    {blocker && blocker !== document.processing_error && <p>{documentProcessingError(blocker)}</p>}
+    {!processing && !blocker && <button type="button" disabled={busy} onClick={() => retry()}>Thử xử lý lại</button>}
+    {!processing && canRetryUnits && <form onSubmit={event => {
+      event.preventDefault();
+      if (validUnits && !busy) retry(units);
+    }}>
+      <label>
+        {document.content_type === "application/pdf" ? "Số trang PDF vật lý" : "Số phần trong tài liệu"} (1–{state.total_units})
+        <input value={selection} onChange={event => setSelection(event.target.value)} placeholder="1, 3, 5" maxLength={128} disabled={busy} />
+      </label>
+      <p>Nhập tối đa 16 số, cách nhau bằng dấu phẩy.</p>
+      <button disabled={busy || !validUnits}>Xử lý lại các phần đã chọn</button>
+    </form>}
+  </details>;
+}
+
 export function LearningDocuments({ channelId, canUpload }: { channelId: string; canUpload: boolean }) {
   const [documents, setDocuments] = useState<LearningDocument[] | null>(null);
   const [form, setForm] = useState(false);
@@ -88,6 +123,15 @@ export function LearningDocuments({ channelId, canUpload }: { channelId: string;
     const link = window.document.createElement("a"); link.href = url; link.download = file.name;
     window.document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function retryProcessing(document: LearningDocument, units?: number[]) {
+    const query = new URLSearchParams({ channel_id: channelId });
+    units?.forEach(unit => query.append("units", String(unit)));
+    const result = await api<LearningDocument>(`/learning-documents/${document.id}/retry?${query}`, { method: "POST", protected: true });
+    if (!mounted.current) return;
+    revision.current++;
+    setDocuments(current => current?.map(item => item.id === result.id ? { ...item, ...result, uploader_name: item.uploader_name } : item) ?? null);
+    setNotice("Đã gửi yêu cầu xử lý lại tài liệu.");
   }
   function reset() { setForm(false); setFile(null); setName(""); setDescription(""); uploadId.current = ""; setError(""); }
   async function upload() {
@@ -169,6 +213,9 @@ export function LearningDocuments({ channelId, canUpload }: { channelId: string;
         if (mounted.current) { setEditing(detail); setEditName(detail.name); setEditDescription(detail.description ?? ""); }
       })}>Chỉnh sửa</button><button disabled={busy} onClick={() => setDeleting(document)}>Xóa tài liệu</button></>}
       </div>
+      {(document.can_manage ?? canUpload) && (document.status !== "READY" ||
+        (!!document.derived_state?.total_units && !document.derived_state.full_pipeline_complete)) &&
+        <DocumentProcessing document={document} busy={busy} retry={units => void perform(() => retryProcessing(document, units))} />}
     </li>)}</ul>
   </section>;
 }

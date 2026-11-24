@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Field, Feedback, formValues, value, validate, useSubmission } from "@/components/forms";
 import { authStore, services } from "./store";
+import { useAuth } from "./provider";
 import type { UserProfile } from "@/lib/types";
 
 export function RegisterForm() {

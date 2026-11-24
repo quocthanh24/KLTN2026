@@ -217,7 +217,7 @@ a.button-link:hover { text-decoration: none; background: var(--brand-deep); }
 .channel-sidebar nav button:hover { background: #efe8d9; }
 .channel-sidebar nav button[aria-current] { background: var(--brand); color: #fff; }
 .channel-sidebar small { display: block; margin-top: 3px; font-weight: 600; opacity: .75; font-size: .72rem; }
-.channel-main { min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
+.channel-main { min-width: 0; display: flex; flex-direction: column; background: var(--surface); overflow: auto; }
 .channel-header { padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .chat-panel, .study-room { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .chat-panel { padding: 0 20px 16px; }

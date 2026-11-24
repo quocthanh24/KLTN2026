@@ -12,6 +12,7 @@ import { StudyRoom } from "@/features/study-room/views";
 import { ApiFailure } from "@/lib/api";
 import { LearningDocuments } from "@/features/learning-documents/views";
 import { AIAssistant } from "@/features/ai/views";
+import { ReportButton } from "@/features/administration/report-button";
 
 function ChannelForm({ channel, save, cancel }: { channel?: Channel; save: (body: ChannelInput) => Promise<void>; cancel: () => void }) {
   const submit = useSubmission();
@@ -42,6 +43,14 @@ export function WorkspaceChannels({ workspace }: { workspace: Workspace }) {
     }).catch(failure => { if (active) setError(failure instanceof Error ? failure.message : "Không thể tải Channel."); });
     return () => { active = false; };
   }, [workspace.id, attempt]);
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    api.channel(selected).then(updated => {
+      if (active) setChannels(current => current?.map(item => item.id === updated.id ? updated : item) ?? [updated]);
+    }).catch(() => { /* Keep the list snapshot until the next reload. */ });
+    return () => { active = false; };
+  }, [selected]);
   const channel = channels?.find(c => c.id === selected);
   const text = channels?.filter(item => item.type === "TEXT") ?? [];
   const rooms = channels?.filter(item => item.type === "STUDY_ROOM") ?? [];
@@ -73,7 +82,11 @@ export function WorkspaceChannels({ workspace }: { workspace: Workspace }) {
         {form === "edit" && manager && <div style={{ padding: 16 }}><ChannelForm key={`edit-${channel.id}`} channel={channel} cancel={() => setForm(null)} save={async ({ name, description }) => {
           const updated = await api.updateChannel(channel.id, { name, description }); setChannels(current => current?.map(c => c.id === updated.id ? updated : c) ?? []); setForm(null); submit.setSuccess("Đã cập nhật Channel.");
         }} /></div>}
-        {channel.type === "TEXT" ? <ChatPanel key={channel.id} channel={channel} /> : <StudyRoom key={channel.id} channel={channel} />}
+        {channel.type === "TEXT" ? <>
+          <ChatPanel key={channel.id} channel={channel} />
+          <LearningDocuments key={`documents-${channel.id}`} channelId={channel.id} canUpload={manager} />
+          <AIAssistant channelId={channel.id} channelName={channel.name} />
+        </> : <StudyRoom key={channel.id} channel={channel} />}
       </> : channels && <p style={{ padding: 16 }}>Chọn một Channel để bắt đầu.</p>}
     </div>
   </section>;

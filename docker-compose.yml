@@ -35,7 +35,7 @@
         mc anonymous set none "local/$$MINIO_BUCKET"
 
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}

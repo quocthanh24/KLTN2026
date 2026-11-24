@@ -5,6 +5,7 @@ export function createChatServices(bridge: AuthBridge) {
   const options = { protected: true };
   return {
     channels: (workspace: string) => request<Channel[]>(`/workspaces/${workspace}/channels`, options),
+    channel: (id: string) => request<Channel>(`/channels/${id}`, options),
     createChannel: (workspace: string, body: ChannelInput) => request<Channel>(`/workspaces/${workspace}/channels`, { ...options, method: "POST", body }),
     updateChannel: (id: string, body: Omit<ChannelInput, "type">) => request<Channel>(`/channels/${id}`, { ...options, method: "PATCH", body }),
     deleteChannel: (id: string) => request<void>(`/channels/${id}`, { ...options, method: "DELETE" }),

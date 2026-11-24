@@ -277,6 +277,20 @@ function AssistantPanel({ channelId, channelName }: { channelId: string; channel
           {(turn.status === "failed" || (["partial", "unverified"].includes(turn.status) && !turn.v2_task?.resumable)) && <button disabled={busy} onClick={() => { retry.current = { question: turn.question, id: crypto.randomUUID() }; setSourceSelection(turn.v2_task?.source_selection ?? null); setQuestion(turn.question); }}>Soạn lại câu hỏi</button>}
           {turn.v2_task && (turn.v2_task.status !== "complete" || turn.v2_task.progress.whole_scope) && <div className={styles.notice} role="status">
             {turn.v2_task.status === "complete" ? "Đã hoàn tất tác vụ." : turn.v2_task.status === "cancelled" ? "Đã dừng tác vụ." : turn.v2_task.status === "stale" ? "Nguồn của tác vụ đã thay đổi. Hãy soạn lại câu hỏi để đọc nguồn hiện tại." : turn.v2_task.status === "expired" ? "Tác vụ đã hết hạn. Hãy soạn lại câu hỏi để bắt đầu lượt mới." : turn.v2_task.status_message ?? (turn.v2_task.reason_codes?.includes("REVIEW_PROTOCOL_ERROR") ? "Bước kiểm chứng chưa hoàn tất. Hãy soạn lại câu hỏi; không có tác vụ chạy nền." : turn.v2_task.error_code ? "Lượt xử lý đã dừng; phần đã kiểm chứng và tiến độ đã được lưu." : "Tác vụ đang xử lý.")}
+            {["pending", "ready", "running", "partial", "interrupted"].includes(turn.v2_task.status) && <button disabled={busy} onClick={() => void run(async () => {
+              const task = await api<V2Task>(`${base}/${detail.id}/v2/tasks/${turn.v2_task!.id}`, { protected: true });
+              if (task.status === "complete") {
+                const updated = await conversationDetail(detail.id, displayedTurns.current);
+                if (alive.current && selected.current === updated.id) {
+                  displayedTurns.current = updated.turns.length;
+                  setDetail(updated);
+                }
+                return;
+              }
+              if (alive.current) setDetail(current => current?.id === detail.id ? {
+                ...current, turns: current.turns.map(item => item.id === turn.id ? { ...item, v2_task: task } : item),
+              } : current);
+            })}>Cập nhật trạng thái tác vụ</button>}
             {turn.v2_task.resumable && <>
               <button disabled={busy} onClick={() => void run(async () => {
                 const updated = await api<Turn>(`${base}/${detail.id}/v2/tasks/${turn.v2_task!.id}/resume`, { method: "POST", protected: true, timeoutMs: 315000 });

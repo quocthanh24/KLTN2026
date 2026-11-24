@@ -25,7 +25,7 @@ export function Dashboard() {
         <div>
           <p className="kicker">Bảng điều khiển</p>
           <h1>Xin chào, {user?.full_name}</h1>
-          <p className="lede">Vào workspace để chat nhóm, mở phòng tự học hoặc mời thành viên.</p>
+          <p className="lede">Vào workspace để chat nhóm, mở phòng tự học, tải tài liệu hoặc hỏi trợ lý AI.</p>
         </div>
         <Link className="button-link" href="/workspaces">Tất cả workspace</Link>
       </div>
@@ -61,11 +61,16 @@ export function Dashboard() {
           <h2>Đổi mật khẩu</h2>
           <p>Phiên hiện tại được giữ; các phiên khác sẽ đăng xuất.</p>
         </Link>
-        <div className="card">
-          <p className="kicker">Sắp có</p>
-          <h2>Trợ lý tài liệu</h2>
-          <p>Hỏi đáp tài liệu học tập bằng AI sẽ được gắn vào workspace ở giai đoạn sau.</p>
-        </div>
+        <Link className="card" href="/learning-analytics">
+          <p className="kicker">Tiến độ</p>
+          <h2>Thống kê học tập</h2>
+          <p>Thời gian tự học, chuỗi ngày học và hoạt động Pomodoro đã ghi nhận.</p>
+        </Link>
+        {user?.system_role === "ADMIN" && <Link className="card" href="/admin">
+          <p className="kicker">Hệ thống</p>
+          <h2>Quản trị</h2>
+          <p>Người dùng, workspace, báo cáo vi phạm và tổng quan vận hành.</p>
+        </Link>}
       </div>
     </>
   );

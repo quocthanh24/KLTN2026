@@ -28,6 +28,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
 const links = [
   { href: "/app", label: "Trang chính" },
   { href: "/workspaces", label: "Workspace" },
+  { href: "/learning-analytics", label: "Thống kê học tập" },
   { href: "/profile", label: "Hồ sơ" },
   { href: "/settings/security", label: "Bảo mật" },
 ];
@@ -47,6 +48,9 @@ export function AppShell({ children, immersive = false }: { children: ReactNode;
               {link.label}
             </Link>
           ))}
+          {user?.system_role === "ADMIN" && (
+            <Link href="/admin" aria-current={pathname.startsWith("/admin") ? "page" : undefined}>Quản trị hệ thống</Link>
+          )}
         </nav>
         <div className="app-user">
           <div className="app-user-meta">
